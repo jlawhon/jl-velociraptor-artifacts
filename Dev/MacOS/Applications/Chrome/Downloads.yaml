@@ -1,0 +1,37 @@
+name: Dev.MacOS.Applications.Chrome.Downloads
+description: |
+  Read all User's chrome download history.
+
+type: CLIENT
+
+parameters:
+  - name: historyGlobs
+    default: /Users/*/Library/Application Support/Google/Chrome/*/History
+  - name: urlSQLQuery
+    default: |
+      SELECT 
+        current_path, target_path, tab_url, 
+        datetime(start_time/ 1000000 + (strftime('%s', '1601-01-01')), 'unixepoch','localtime') as start_t, 
+        datetime(end_time/ 1000000 + (strftime('%s', '1601-01-01')), 'unixepoch', 'localtime') as end_t, 
+        received_bytes, total_bytes, referrer, mime_type, original_mime_type 
+      FROM downloads
+  - name: userRegex
+    default: .
+
+reference: Based on MacOS.Applications.Chrome.History
+
+author: https://github.com/jlawhon
+
+precondition: SELECT OS From info() where OS = 'darwin'
+
+sources: 
+  - query: |
+      LET history_files = SELECT parse_string_with_regex(regex='/Users/(?P<User>[^/]+)',string=FullPath).User AS User, FullPath, Mtime FROM glob(globs=historyGlobs)
+
+      SELECT * FROM foreach(row=history_files,
+        query={
+          SELECT User, * 
+          FROM sqlite(file=FullPath, query=urlSQLQuery)
+          ORDER BY end_t DESC
+        }
+      ) 
